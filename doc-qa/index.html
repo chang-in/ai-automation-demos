@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocuMind — 사내 문서 AI 어시스턴트</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==" crossorigin="anonymous"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #f7f8fa; --panel: #ffffff; --border: #e4e7ec;
+    --text: #1a1f2e; --muted: #667085; --accent: #2563eb;
+    --accent-soft: #eff4ff; --user-bubble: #2563eb; --ai-bubble: #f1f3f7;
+  }
+  body { font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+  header .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+  header h1 { font-size: 17px; font-weight: 700; }
+  header p { font-size: 12.5px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  .key-wrap { display: flex; gap: 8px; align-items: center; }
+  .key-wrap input { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; width: 230px; }
+  .key-status { font-size: 12px; color: var(--muted); }
+  .key-status.ok { color: #059669; font-weight: 600; }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside { width: 300px; background: var(--panel); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .dropzone { border: 2px dashed var(--border); border-radius: 12px; padding: 26px 14px; text-align: center; color: var(--muted); font-size: 13.5px; cursor: pointer; transition: .15s; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .doc-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .doc-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .doc-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .doc-item .size { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
+  .doc-item button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; }
+  .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .messages { flex: 1; overflow-y: auto; padding: 28px 8%; display: flex; flex-direction: column; gap: 18px; }
+  .empty-state { margin: auto; text-align: center; color: var(--muted); }
+  .empty-state .big { font-size: 42px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 18px; color: var(--text); margin-bottom: 6px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+  .msg { max-width: 78%; padding: 12px 16px; border-radius: 14px; font-size: 14.5px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user-bubble); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.ai { align-self: flex-start; background: var(--ai-bubble); border-bottom-left-radius: 4px; }
+  .msg.thinking { color: var(--muted); font-style: italic; }
+  .composer { border-top: 1px solid var(--border); background: var(--panel); padding: 16px 8%; display: flex; gap: 10px; }
+  .composer textarea { flex: 1; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; font-family: inherit; resize: none; height: 50px; }
+  .composer textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .composer button { background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 0 22px; font-size: 14.5px; font-weight: 600; cursor: pointer; }
+  .composer button:disabled { opacity: .45; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">D</div>
+  <div>
+    <h1>DocuMind</h1>
+    <p>사내 문서를 업로드하면, AI가 근거를 찾아 답합니다</p>
+  </div>
+  <div class="spacer"></div>
+  <div class="key-wrap">
+    <input id="apiKey" type="password" placeholder="Gemini API 키 입력">
+    <span id="keyStatus" class="key-status">키 필요</span>
+  </div>
+</header>
+<main>
+  <aside>
+    <h2>지식 베이스</h2>
+    <div class="dropzone" id="dropzone">📄 PDF · TXT · MD 파일을<br>끌어다 놓거나 클릭</div>
+    <input type="file" id="fileInput" accept=".pdf,.txt,.md" multiple hidden>
+    <div class="doc-list" id="docList"></div>
+  </aside>
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="big">🗂️</div>
+        <h3>문서 기반 AI 질의응답</h3>
+        <p>왼쪽에 사내 규정, 매뉴얼, 계약서 등을 올리고<br>자연어로 질문하세요. 문서에 없는 내용은 없다고 답합니다.</p>
+      </div>
+    </div>
+    <div class="composer">
+      <textarea id="input" placeholder="예: 연차 이월 규정이 어떻게 되나요?"></textarea>
+      <button id="sendBtn">전송</button>
+    </div>
+  </div>
+</main>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const docs = [];
+const history = [];
+const $ = id => document.getElementById(id);
+
+// API 키: localStorage 유지
+$("apiKey").value = localStorage.getItem("gemini_key") || "";
+const updateKeyStatus = () => {
+  const ok = $("apiKey").value.trim().length > 10;
+  $("keyStatus").textContent = ok ? "연결됨" : "키 필요";
+  $("keyStatus").className = "key-status" + (ok ? " ok" : "");
+};
+$("apiKey").addEventListener("input", () => { localStorage.setItem("gemini_key", $("apiKey").value.trim()); updateKeyStatus(); });
+updateKeyStatus();
+
+// 파일 업로드
+$("dropzone").onclick = () => $("fileInput").click();
+$("dropzone").ondragover = e => { e.preventDefault(); $("dropzone").classList.add("drag"); };
+$("dropzone").ondragleave = () => $("dropzone").classList.remove("drag");
+$("dropzone").ondrop = e => { e.preventDefault(); $("dropzone").classList.remove("drag"); addFiles(e.dataTransfer.files); };
+$("fileInput").onchange = e => addFiles(e.target.files);
+
+async function addFiles(files) {
+  for (const f of files) {
+    let text = "";
+    if (f.name.toLowerCase().endsWith(".pdf")) {
+      const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const content = await (await pdf.getPage(p)).getTextContent();
+        text += content.items.map(i => i.str).join(" ") + "\n";
+      }
+    } else {
+      text = await f.text();
+    }
+    docs.push({ name: f.name, text });
+  }
+  renderDocs();
+}
+
+function renderDocs() {
+  $("docList").innerHTML = docs.map((d, i) =>
+    `<div class="doc-item">📄 <span class="name">${d.name}</span><span class="size">${(d.text.length/1000).toFixed(1)}k자</span><button onclick="removeDoc(${i})">✕</button></div>`
+  ).join("");
+}
+function removeDoc(i) { docs.splice(i, 1); renderDocs(); }
+
+// 채팅
+function addMsg(role, text) {
+  $("emptyState")?.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  $("messages").appendChild(div);
+  $("messages").scrollTop = $("messages").scrollHeight;
+  return div;
+}
+
+async function send() {
+  const q = $("input").value.trim();
+  const key = $("apiKey").value.trim();
+  if (!q) return;
+  if (!key) { addMsg("ai", "우측 상단에 Gemini API 키를 먼저 입력해주세요."); return; }
+  if (!docs.length) { addMsg("ai", "먼저 왼쪽에서 문서를 업로드해주세요."); return; }
+  $("input").value = "";
+  addMsg("user", q);
+  history.push({ role: "user", parts: [{ text: q }] });
+  const thinking = addMsg("ai thinking", "문서를 검토하는 중…");
+  $("sendBtn").disabled = true;
+  try {
+    const context = docs.map(d => `=== 문서: ${d.name} ===\n${d.text}`).join("\n\n");
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text:
+          "당신은 사내 문서 기반 AI 어시스턴트입니다. 반드시 아래 문서 내용에 근거해서만 한국어로 답하세요. 답할 때 어떤 문서의 어느 부분을 근거로 했는지 밝히세요. 문서에 없는 내용이면 '업로드된 문서에서 해당 내용을 찾을 수 없습니다'라고 정직하게 답하세요.\n\n" + context } ] },
+        contents: history
+      })
+    });
+    const data = await res.json();
+    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text
+      || "오류: " + (data.error?.message || "응답을 받지 못했습니다.");
+    thinking.className = "msg ai";
+    thinking.textContent = answer;
+    history.push({ role: "model", parts: [{ text: answer }] });
+  } catch (err) {
+    thinking.className = "msg ai";
+    thinking.textContent = "네트워크 오류: " + err.message;
+  }
+  $("sendBtn").disabled = false;
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+$("sendBtn").onclick = send;
+$("input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+</script>
+</body>
+</html>

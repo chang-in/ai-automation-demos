@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReplyFlow — 쇼핑몰 리뷰·문의 AI 자동응대</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #18223c; --navy-2: #24304e; --ink: #20283a; --muted: #737b8c;
+    --line: #e7e9ef; --canvas: #f5f6f9; --white: #fff; --violet: #6758d8;
+    --violet-dark: #5546c4; --violet-soft: #f0eefe; --green: #1c9a72; --green-soft: #eaf8f3;
+    --shadow: 0 14px 38px rgba(28, 35, 58, .08);
+  }
+  body { min-height: 100vh; background: var(--canvas); color: var(--ink); font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; }
+  button { cursor: pointer; }
+  .topbar { height: 74px; padding: 0 30px; background: var(--white); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 18px; }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 310px; }
+  .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(145deg, #7567e8, #5142bb); display: grid; place-items: center; box-shadow: 0 7px 16px rgba(103,88,216,.25); }
+  .brand-mark svg { width: 22px; height: 22px; }
+  .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
+  .brand-desc { margin-top: 2px; font-size: 11px; color: var(--muted); }
+  .top-spacer { flex: 1; }
+  .api-area { display: flex; align-items: center; gap: 9px; }
+  .api-label { color: var(--muted); font-size: 12px; font-weight: 700; }
+  .key-box { position: relative; }
+  .key-box input { width: 235px; height: 38px; padding: 0 38px 0 12px; border: 1px solid var(--line); border-radius: 9px; background: #fafbfc; color: var(--ink); font-size: 12px; outline: none; transition: .2s; }
+  .key-box input:focus { border-color: var(--violet); background: white; box-shadow: 0 0 0 3px var(--violet-soft); }
+  .key-box button { position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; border: 0; background: transparent; color: #8a91a0; border-radius: 6px; display: grid; place-items: center; }
+  .key-box button:hover { background: #eef0f4; }
+  .key-box svg { width: 16px; height: 16px; }
+  .api-state { display: flex; align-items: center; gap: 5px; width: 54px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .api-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #c4c8d1; }
+  .api-state.ok { color: var(--green); }
+  .api-state.ok::before { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  .app { height: calc(100vh - 74px); display: grid; grid-template-columns: 310px minmax(420px, .92fr) minmax(430px, 1.08fr); }
+  .panel { min-width: 0; overflow-y: auto; }
+  .settings { padding: 25px 22px; background: var(--navy); color: white; }
+  .panel-head { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 26px; }
+  .step { flex: 0 0 25px; height: 25px; border-radius: 8px; display: grid; place-items: center; background: var(--violet); color: white; font-size: 11px; font-weight: 800; }
+  .settings .step { background: rgba(255,255,255,.13); color: #c9c2ff; }
+  .panel-title { font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
+  .panel-sub { margin-top: 4px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .settings .panel-sub { color: #9099b2; }
+  .field { margin-bottom: 19px; }
+  .field label { display: block; margin-bottom: 8px; color: #c8cedd; font-size: 11px; font-weight: 700; }
+  .field input, .field textarea { width: 100%; border: 1px solid #39435f; border-radius: 10px; background: var(--navy-2); color: white; outline: none; transition: .2s; }
+  .field input { height: 42px; padding: 0 13px; font-size: 13px; }
+  .field textarea { height: 106px; padding: 12px 13px; resize: vertical; font-size: 12.5px; line-height: 1.65; }
+  .field input::placeholder, .field textarea::placeholder { color: #7d879f; }
+  .field input:focus, .field textarea:focus { border-color: #8b7ff0; box-shadow: 0 0 0 3px rgba(103,88,216,.18); }
+  .tone-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tone-options input { position: absolute; opacity: 0; pointer-events: none; }
+  .tone-options label { height: 37px; border: 1px solid #3c4661; border-radius: 9px; display: grid; place-items: center; color: #9ba4ba; font-size: 11.5px; font-weight: 700; transition: .18s; cursor: pointer; }
+  .tone-options input:checked + label { border-color: #8476eb; background: rgba(103,88,216,.22); color: #dedaff; }
+  .settings-note { margin-top: 28px; padding: 13px; border-radius: 10px; background: rgba(255,255,255,.055); color: #929bb2; font-size: 10.5px; line-height: 1.6; display: flex; gap: 8px; }
+  .settings-note svg { flex: 0 0 14px; margin-top: 2px; }
+  .input-panel { padding: 25px 26px; background: #fafafc; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  .input-panel .panel-head { margin-bottom: 17px; }
+  .sample-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .caption { color: var(--muted); font-size: 11px; font-weight: 700; }
+  .sample-btn { height: 31px; padding: 0 11px; border: 1px solid #dedbeF; border-radius: 8px; background: white; color: var(--violet); font-size: 11px; font-weight: 800; display: flex; align-items: center; gap: 6px; transition: .18s; }
+  .sample-btn:hover { border-color: var(--violet); background: var(--violet-soft); }
+  .sample-btn svg { width: 13px; height: 13px; }
+  .customer-wrap { position: relative; flex: 1; min-height: 230px; }
+  #customerMessage { width: 100%; height: 100%; min-height: 230px; padding: 18px; padding-bottom: 42px; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); resize: none; outline: none; font-size: 14px; line-height: 1.75; box-shadow: 0 5px 18px rgba(25,32,55,.035); transition: .2s; }
+  #customerMessage:focus { border-color: #a69ceb; box-shadow: 0 0 0 3px var(--violet-soft); }
+  #customerMessage::placeholder { color: #b0b5c0; }
+  .char-count { position: absolute; right: 14px; bottom: 12px; color: #a4a9b4; font-size: 10.5px; }
+  .sample-tag { position: absolute; left: 14px; bottom: 11px; display: none; padding: 3px 7px; border-radius: 5px; background: var(--violet-soft); color: var(--violet); font-size: 9.5px; font-weight: 800; }
+  .generate { width: 100%; height: 50px; margin-top: 15px; border: 0; border-radius: 11px; background: linear-gradient(135deg, #7365e3, #5a4ac7); color: white; font-size: 13px; font-weight: 800; box-shadow: 0 9px 20px rgba(103,88,216,.23); display: flex; align-items: center; justify-content: center; gap: 9px; transition: .2s; }
+  .generate:hover { transform: translateY(-1px); box-shadow: 0 12px 25px rgba(103,88,216,.28); }
+  .generate:disabled { opacity: .65; cursor: wait; transform: none; }
+  .generate svg { width: 17px; height: 17px; }
+  .shortcut { margin-top: 8px; text-align: center; color: #9da3ae; font-size: 10px; }
+  .result-panel { padding: 25px 28px; background: white; display: flex; flex-direction: column; }
+  .result-panel .panel-head { margin-bottom: 17px; }
+  .status-badge { margin-left: auto; padding: 5px 9px; border-radius: 20px; background: #f0f1f4; color: #8a909e; font-size: 9.5px; font-weight: 800; }
+  .status-badge.ready { background: var(--green-soft); color: var(--green); }
+  .answer-card { flex: 1; min-height: 230px; position: relative; }
+  #answer { width: 100%; height: 100%; min-height: 230px; padding: 20px; border: 1px solid var(--line); border-radius: 13px; background: #fbfbfd; color: var(--ink); resize: none; outline: none; font-size: 14px; line-height: 1.8; transition: .2s; }
+  #answer:focus { border-color: #aaa2e3; background: white; box-shadow: 0 0 0 3px var(--violet-soft); }
+  #answer::placeholder { color: #b4b8c2; }
+  .answer-empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; color: #a3a8b3; }
+  .answer-empty.hidden { display: none; }
+  .empty-icon { width: 51px; height: 51px; margin: 0 auto 13px; border-radius: 16px; background: #f0eefc; color: var(--violet); display: grid; place-items: center; }
+  .empty-icon svg { width: 25px; height: 25px; }
+  .answer-empty strong { display: block; margin-bottom: 5px; color: #777e8c; font-size: 12px; }
+  .answer-empty span { font-size: 10.5px; }
+  .result-actions { display: flex; align-items: center; gap: 9px; margin-top: 15px; }
+  .copy-btn { height: 42px; padding: 0 18px; border: 1px solid var(--line); border-radius: 9px; background: white; color: #555d6c; font-size: 11.5px; font-weight: 800; display: flex; align-items: center; gap: 7px; transition: .18s; }
+  .copy-btn:hover:not(:disabled) { border-color: var(--violet); color: var(--violet); }
+  .copy-btn:disabled { opacity: .45; cursor: default; }
+  .copy-btn svg { width: 14px; height: 14px; }
+  .editable-note { margin-left: auto; color: #a1a6b0; font-size: 10px; }
+  .error { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #fff0f1; color: #be4350; font-size: 11px; line-height: 1.5; display: none; }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 1050px) { .app { grid-template-columns: 280px 1fr; height: auto; min-height: calc(100vh - 74px); } .result-panel { grid-column: 2; min-height: 540px; } .input-panel { min-height: 560px; } .settings { grid-row: 1 / 3; } }
+  @media (max-width: 720px) { .topbar { height: auto; padding: 14px 17px; flex-wrap: wrap; } .brand { min-width: 0; } .brand-desc, .api-label { display: none; } .api-area { width: 100%; } .key-box { flex: 1; } .key-box input { width: 100%; } .app { display: block; height: auto; } .panel { overflow: visible; } .settings, .input-panel, .result-panel { padding: 22px 18px; min-height: auto; } .input-panel { height: 560px; } .result-panel { height: 540px; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M5 5.5h14v10H9l-4 3v-13Z"/><path d="m9 10 2 2 4-4"/></svg></div>
+    <div><div class="brand-name">ReplyFlow</div><div class="brand-desc">쇼핑몰 리뷰·문의 AI 자동응대</div></div>
+  </div>
+  <div class="top-spacer"></div>
+  <div class="api-area">
+    <span class="api-label">Gemini API</span>
+    <div class="key-box">
+      <input id="apiKey" type="password" placeholder="API 키를 입력하세요" autocomplete="off">
+      <button id="toggleKey" aria-label="API 키 보기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+    </div>
+    <span id="keyStatus" class="api-state">키 필요</span>
+  </div>
+</header>
+
+<main class="app">
+  <aside class="panel settings">
+    <div class="panel-head"><span class="step">1</span><div><h2 class="panel-title">우리 가게 설정</h2><p class="panel-sub">답변에 반영할 기본 정보를 입력하세요.</p></div></div>
+    <div class="field"><label for="storeName">상호명</label><input id="storeName" value="마일드데이" placeholder="예: 마일드데이"></div>
+    <div class="field"><label for="category">업종</label><input id="category" value="여성 의류 쇼핑몰" placeholder="예: 여성 의류 쇼핑몰"></div>
+    <div class="field"><label for="policy">답변 정책</label><textarea id="policy" placeholder="교환·환불, 배송 등 꼭 지켜야 할 정책을 입력하세요.">교환·환불은 상품 수령 후 7일 이내 가능합니다.
+단순 변심 반품 시 왕복 배송비는 고객 부담입니다.
+평일 오후 2시 이전 주문은 당일 출고합니다.</textarea></div>
+    <div class="field"><label>답변 말투</label><div class="tone-options">
+      <input type="radio" name="tone" id="tonePolite" value="정중함" checked><label for="tonePolite">정중함</label>
+      <input type="radio" name="tone" id="toneFriendly" value="친근함"><label for="toneFriendly">친근함</label>
+      <input type="radio" name="tone" id="toneExpert" value="전문적"><label for="toneExpert">전문적</label>
+    </div></div>
+    <div class="settings-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><span>입력한 가게 정보와 정책은 답변 생성에만 사용되며 외부 서버에 별도로 저장하지 않습니다.</span></div>
+  </aside>
+
+  <section class="panel input-panel">
+    <div class="panel-head"><span class="step">2</span><div><h2 class="panel-title">고객 리뷰 · 문의</h2><p class="panel-sub">응대가 필요한 고객 메시지를 붙여넣으세요.</p></div></div>
+    <div class="sample-row"><span class="caption">고객 메시지</span><button id="sampleBtn" class="sample-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.6"/><path d="M20 4v4.6h-4.6"/></svg>샘플 불러오기</button></div>
+    <div class="customer-wrap"><textarea id="customerMessage" maxlength="2000" placeholder="고객이 남긴 리뷰나 문의 내용을 입력하세요."></textarea><span id="sampleTag" class="sample-tag"></span><span id="charCount" class="char-count">0 / 2,000</span></div>
+    <button id="generateBtn" class="generate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg><span>AI 답변 생성</span></button>
+    <p class="shortcut">⌘ + Enter로 빠르게 생성</p>
+    <div id="errorBox" class="error"></div>
+  </section>
+
+  <section class="panel result-panel">
+    <div class="panel-head"><span class="step">3</span><div><h2 class="panel-title">AI 답변 초안</h2><p class="panel-sub">생성된 답변을 확인하고 필요하면 직접 다듬으세요.</p></div><span id="resultStatus" class="status-badge">대기 중</span></div>
+    <div class="answer-card"><textarea id="answer" placeholder="" aria-label="AI 답변 초안"></textarea><div id="answerEmpty" class="answer-empty"><div><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 3V5Z"/><path d="M8 9h8m-8 3h5"/></svg></div><strong>아직 생성된 답변이 없어요</strong><span>고객 메시지를 입력하고 AI 답변 생성을 눌러주세요.</span></div></div></div>
+    <div class="result-actions"><button id="copyBtn" class="copy-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>답변 복사</span></button><span class="editable-note">텍스트를 클릭해 바로 수정할 수 있어요</span></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const samples = [
+  { type: "악성 리뷰", text: "별 하나도 아깝네요. 화면이랑 색도 완전 다르고 실밥도 여기저기 튀어나와 있어요. 이런 걸 돈 받고 팔다니 다시는 여기서 안 삽니다." },
+  { type: "배송 문의", text: "어제 오후에 주문했는데 이번 주 금요일까지 받을 수 있을까요? 주말에 꼭 입어야 해서 빠른 출고 부탁드려요!" },
+  { type: "칭찬 리뷰", text: "사진보다 실물이 훨씬 예뻐요! 핏도 딱 좋고 포장도 정성스러워서 기분 좋았습니다. 다른 색상도 구매하려고요 :)" },
+  { type: "교환 문의", text: "사이즈가 생각보다 작아서 한 사이즈 큰 걸로 교환하고 싶어요. 택은 그대로 붙어 있는데 어떻게 신청하면 되나요?" },
+  { type: "상품 문의", text: "이 니트 소재가 까슬거리지는 않나요? 피부가 예민한 편이고, 키 165cm 기준으로 기장이 어디까지 오는지도 궁금해요." }
+];
+let sampleIndex = 0;
+
+// API 키는 기존 데모와 같은 localStorage 키로 유지합니다.
+$("apiKey").value = localStorage.getItem("gemini_key") || "";
+function updateKeyStatus() {
+  const ok = $("apiKey").value.trim().length > 10;
+  $("keyStatus").textContent = ok ? "준비됨" : "키 필요";
+  $("keyStatus").className = "api-state" + (ok ? " ok" : "");
+}
+$("apiKey").addEventListener("input", () => {
+  localStorage.setItem("gemini_key", $("apiKey").value.trim());
+  updateKeyStatus();
+});
+$("toggleKey").onclick = () => {
+  const hidden = $("apiKey").type === "password";
+  $("apiKey").type = hidden ? "text" : "password";
+  $("toggleKey").setAttribute("aria-label", hidden ? "API 키 숨기기" : "API 키 보기");
+};
+updateKeyStatus();
+
+function updateCount() { $("charCount").textContent = `${$("customerMessage").value.length.toLocaleString()} / 2,000`; }
+$("customerMessage").addEventListener("input", () => { updateCount(); $("sampleTag").style.display = "none"; });
+$("sampleBtn").onclick = () => {
+  const sample = samples[sampleIndex];
+  $("customerMessage").value = sample.text;
+  $("sampleTag").textContent = sample.type;
+  $("sampleTag").style.display = "inline-block";
+  sampleIndex = (sampleIndex + 1) % samples.length;
+  updateCount();
+  $("customerMessage").focus();
+};
+
+function setError(message = "") {
+  $("errorBox").textContent = message;
+  $("errorBox").style.display = message ? "block" : "none";
+}
+
+async function generateAnswer() {
+  const key = $("apiKey").value.trim();
+  const customerMessage = $("customerMessage").value.trim();
+  const storeName = $("storeName").value.trim();
+  const category = $("category").value.trim();
+  const policy = $("policy").value.trim();
+  const tone = document.querySelector('input[name="tone"]:checked').value;
+  setError();
+  if (!key) { setError("상단에 Gemini API 키를 먼저 입력해 주세요."); $("apiKey").focus(); return; }
+  if (!customerMessage) { setError("답변할 고객 리뷰나 문의 내용을 입력해 주세요."); $("customerMessage").focus(); return; }
+
+  const button = $("generateBtn");
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner"></span><span>답변을 작성하고 있어요…</span>';
+  $("resultStatus").textContent = "생성 중";
+  $("resultStatus").className = "status-badge";
+  $("answerEmpty").classList.add("hidden");
+  $("answer").value = "";
+
+  const systemPrompt = `당신은 쇼핑몰의 리뷰와 고객 문의에 답하는 숙련된 고객 응대 담당자입니다.
+아래 가게 정보를 빠짐없이 반영해 한국어 답변 초안 하나만 작성하세요.
+
+[가게 정보]
+- 상호명: ${storeName || "미입력"}
+- 업종: ${category || "미입력"}
+- 답변 정책: ${policy || "별도 정책 없음"}
+- 말투: ${tone}
+
+[작성 원칙]
+1. 고객 감정을 먼저 파악하고, 불만에는 변명보다 공감과 해결책을 우선하세요.
+2. 가게 정책과 충돌하는 약속이나 확인되지 않은 사실은 만들지 마세요.
+3. ${tone} 말투를 자연스럽게 유지하고, 기계적인 표현은 피하세요.
+4. 바로 게시할 수 있도록 2~5문장으로 간결하게 작성하세요.
+5. 답변 본문만 출력하고 제목, 설명, 따옴표는 붙이지 마세요.`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: customerMessage }] }],
+        generationConfig: { temperature: 0.65, maxOutputTokens: 500 }
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || `API 요청 실패 (${response.status})`);
+    const answer = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
+    if (!answer) throw new Error("답변을 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    $("answer").value = answer;
+    $("copyBtn").disabled = false;
+    $("resultStatus").textContent = "초안 완성";
+    $("resultStatus").className = "status-badge ready";
+  } catch (error) {
+    setError("답변 생성 중 오류가 발생했어요: " + error.message);
+    $("answerEmpty").classList.remove("hidden");
+    $("resultStatus").textContent = "오류";
+    $("copyBtn").disabled = true;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg><span>AI 답변 생성</span>';
+  }
+}
+
+$("generateBtn").onclick = generateAnswer;
+$("customerMessage").addEventListener("keydown", event => {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); generateAnswer(); }
+});
+$("answer").addEventListener("input", () => { $("copyBtn").disabled = !$("answer").value.trim(); });
+$("copyBtn").onclick = async () => {
+  if (!$("answer").value.trim()) return;
+  try {
+    await navigator.clipboard.writeText($("answer").value);
+  } catch (_) {
+    $("answer").select(); document.execCommand("copy");
+  }
+  const label = $("copyBtn").querySelector("span");
+  label.textContent = "복사 완료";
+  setTimeout(() => { label.textContent = "답변 복사"; }, 1500);
+};
+</script>
+</body>
+</html>
